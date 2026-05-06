@@ -1,0 +1,233 @@
+{
+    "info": {
+        "name": "Eshia API - FCM Testing",
+        "description": "Collection for testing Firebase Cloud Messaging implementation",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:8000/api",
+            "type": "string"
+        },
+        {
+            "key": "fcm_token",
+            "value": "YOUR_DEVICE_FCM_TOKEN_HERE",
+            "type": "string"
+        },
+        {
+            "key": "sales_id",
+            "value": "SALES123",
+            "type": "string"
+        },
+        {
+            "key": "user_id",
+            "value": "1",
+            "type": "string"
+        }
+    ],
+    "item": [
+        {
+            "name": "1. Update User FCM Token",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"user_id\": {{user_id}},\n  \"fcm_token\": \"{{fcm_token}}\",\n  \"sales_id\": \"{{sales_id}}\"\n}"
+                },
+                "url": {
+                    "raw": "{{base_url}}/fcm-test/update-token",
+                    "host": ["{{base_url}}"],
+                    "path": ["fcm-test", "update-token"]
+                },
+                "description": "Update user's FCM token and sales_id"
+            }
+        },
+        {
+            "name": "2. Send Test Notification to Token",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"token\": \"{{fcm_token}}\",\n  \"title\": \"Test Notification\",\n  \"body\": \"This is a test message from Eshia API\",\n  \"data\": {\n    \"test_key\": \"test_value\",\n    \"timestamp\": \"2026-02-22 10:30:00\"\n  }\n}"
+                },
+                "url": {
+                    "raw": "{{base_url}}/fcm-test/send",
+                    "host": ["{{base_url}}"],
+                    "path": ["fcm-test", "send"]
+                },
+                "description": "Send a test notification to a specific FCM token"
+            }
+        },
+        {
+            "name": "3. Simulate New Sell (Test)",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"sales_id\": \"{{sales_id}}\",\n  \"nojual\": \"TEST001\",\n  \"grandtotal\": 250000\n}"
+                },
+                "url": {
+                    "raw": "{{base_url}}/fcm-test/simulate-sell",
+                    "host": ["{{base_url}}"],
+                    "path": ["fcm-test", "simulate-sell"]
+                },
+                "description": "Simulate a new sell creation without database - sends notification to users with matching sales_id"
+            }
+        },
+        {
+            "name": "4. Create Real Sell (Auto Notification)",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"nojual\": \"SELL001\",\n  \"sales_id\": \"{{sales_id}}\",\n  \"tgl\": \"2026-02-22\",\n  \"grandtotal\": 150000,\n  \"subtotal\": 140000,\n  \"pelanggan_id\": \"CUST001\",\n  \"pay\": \"cash\"\n}"
+                },
+                "url": {
+                    "raw": "{{base_url}}/sell",
+                    "host": ["{{base_url}}"],
+                    "path": ["sell"]
+                },
+                "description": "Create a real sell record - will automatically trigger FCM notification via observer"
+            }
+        },
+        {
+            "name": "5. Send to Sales ID",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"sales_id\": \"{{sales_id}}\",\n  \"title\": \"Sales Team Notification\",\n  \"body\": \"Important message for all sales team members\",\n  \"data\": {\n    \"priority\": \"high\",\n    \"action\": \"view_dashboard\"\n  }\n}"
+                },
+                "url": {
+                    "raw": "{{base_url}}/fcm-test/send-to-sales",
+                    "host": ["{{base_url}}"],
+                    "path": ["fcm-test", "send-to-sales"]
+                },
+                "description": "Send notification to all users with a specific sales_id"
+            }
+        },
+        {
+            "name": "6. Send to Topic",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"topic\": \"sales_notifications\",\n  \"title\": \"Topic Broadcast\",\n  \"body\": \"Message to all topic subscribers\",\n  \"data\": {\n    \"type\": \"broadcast\",\n    \"category\": \"sales\"\n  }\n}"
+                },
+                "url": {
+                    "raw": "{{base_url}}/fcm-test/send-to-topic",
+                    "host": ["{{base_url}}"],
+                    "path": ["fcm-test", "send-to-topic"]
+                },
+                "description": "Send notification to all devices subscribed to a topic"
+            }
+        },
+        {
+            "name": "7. Subscribe to Topic",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"tokens\": [\"{{fcm_token}}\"],\n  \"topic\": \"sales_notifications\"\n}"
+                },
+                "url": {
+                    "raw": "{{base_url}}/fcm-test/subscribe-topic",
+                    "host": ["{{base_url}}"],
+                    "path": ["fcm-test", "subscribe-topic"]
+                },
+                "description": "Subscribe FCM tokens to a topic"
+            }
+        },
+        {
+            "name": "8. Unsubscribe from Topic",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"tokens\": [\"{{fcm_token}}\"],\n  \"topic\": \"sales_notifications\"\n}"
+                },
+                "url": {
+                    "raw": "{{base_url}}/fcm-test/unsubscribe-topic",
+                    "host": ["{{base_url}}"],
+                    "path": ["fcm-test", "unsubscribe-topic"]
+                },
+                "description": "Unsubscribe FCM tokens from a topic"
+            }
+        },
+        {
+            "name": "Get All Sells",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{base_url}}/sell",
+                    "host": ["{{base_url}}"],
+                    "path": ["sell"]
+                },
+                "description": "List all sell records"
+            }
+        },
+        {
+            "name": "Get Sell by ID",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{base_url}}/sell/SELL001",
+                    "host": ["{{base_url}}"],
+                    "path": ["sell", "SELL001"]
+                },
+                "description": "Get a specific sell record by ID"
+            }
+        }
+    ]
+}
