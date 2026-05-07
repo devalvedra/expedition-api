@@ -19,9 +19,9 @@
         <select name="status"
                 class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
             <option value="">Semua Status</option>
-            @foreach (\App\Models\Delivery::STATUSES as $s)
-                <option value="{{ $s }}" {{ request('status') === $s ? 'selected' : '' }}>
-                    {{ \App\Models\Delivery::STATUS_LABELS[$s] ?? $s }}
+            @foreach (\App\Models\DELIVERY_STATUS::cases() as $case)
+                <option value="{{ $case->value }}" {{ request('status') === $case->value ? 'selected' : '' }}>
+                    {{ $case->label() }}
                 </option>
             @endforeach
         </select>
@@ -70,7 +70,7 @@
                             $class = $statusClasses[$delivery->status] ?? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
                         @endphp
                         <span class="px-2 py-0.5 text-xs font-medium rounded-full {{ $class }}">
-                            {{ \App\Models\Delivery::STATUS_LABELS[$delivery->status] ?? $delivery->status }}
+                            {{ \App\Models\DELIVERY_STATUS::tryFrom($delivery->status)?->label() ?? $delivery->status }}
                         </span>
                     </td>
                     <td class="px-4 py-3 text-center">

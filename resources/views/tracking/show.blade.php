@@ -103,7 +103,7 @@
                 'Dimuat'             => 'bg-yellow-500',
             ];
 
-            $statusLabels = \App\Models\Delivery::STATUS_LABELS;
+            $statusLabels = collect(\App\Models\DELIVERY_STATUS::cases())->mapWithKeys(fn($s) => [$s->value => $s->label()])->all();
             $isInTransit   = $delivery->status === \App\Models\DELIVERY_STATUS::IN_TRANSIT->value;
             $isCompleted   = $delivery->status === \App\Models\DELIVERY_STATUS::COMPLETED->value;
             $hasPbfCoords  = $delivery->pbf && $delivery->pbf->lat && $delivery->pbf->lng;

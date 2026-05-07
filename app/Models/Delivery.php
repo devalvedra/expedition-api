@@ -4,25 +4,28 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-enum DELIVERY_STATUS: string{
-    case PENDING = 'PENDING';
+enum DELIVERY_STATUS: string
+{
+    case PROCESS = 'PROSES';
     case LOADED = 'DIMUAT';
-    case WAITING_DRIVER = 'MENUNGGU_SUPIR';
-    case IN_TRANSIT = 'SEDANG_DIKIRIM';
+    case IN_DELIVERY = 'SEDANG_DIKIRIM';
+    case IN_TRANSIT = 'TRANSIT';
     case COMPLETED = 'SELESAI';
+
+    public function label(): string
+    {
+        return match($this) {
+            self::PROCESS     => 'Proses',
+            self::LOADED      => 'Dimuat',
+            self::IN_DELIVERY => 'Sedang Dikirim',
+            self::IN_TRANSIT  => 'Transit',
+            self::COMPLETED   => 'Selesai',
+        };
+    }
 }
 
 class Delivery extends Model
 {
-    const STATUSES = ['PENDING', 'DIMUAT', 'MENUNGGU_SUPIR', 'SEDANG_DIKIRIM', 'SELESAI'];
-
-    const STATUS_LABELS = [
-        'PENDING'        => 'Pending',
-        'DIMUAT'         => 'Dimuat',
-        'MENUNGGU_SUPIR' => 'Menunggu Supir',
-        'SEDANG_DIKIRIM' => 'Sedang Dikirim',
-        'SELESAI'        => 'Selesai',
-    ];
 
     protected $table = 'tbpengiriman';
     protected $primaryKey = 'no_invoice';

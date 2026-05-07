@@ -73,7 +73,7 @@ class DeliveryDashboardController extends Controller
     {
         $delivery = Delivery::findOrFail($id);
         $pbfs = Pbf::orderBy('nama_pbf')->get();
-        $statuses = Delivery::STATUSES;
+        $statuses = DELIVERY_STATUS::cases();
 
         return view('delivery.edit', compact('delivery', 'pbfs', 'statuses'));
     }
@@ -87,7 +87,7 @@ class DeliveryDashboardController extends Controller
             'jumlah_barang_besar'  => 'required|integer|min:0',
             'jumlah_barang_sedang' => 'required|integer|min:0',
             'jumlah_barang_kecil'  => 'required|integer|min:0',
-            'status'               => 'required|string|in:' . implode(',', Delivery::STATUSES),
+            'status'               => 'required|string|in:' . implode(',', array_map(fn($s) => $s->value, DELIVERY_STATUS::cases())),
             'no_kendaraan'         => 'nullable|string|max:255',
         ]);
 

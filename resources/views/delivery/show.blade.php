@@ -26,7 +26,7 @@
         <div>
             <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">Status Pengiriman</p>
             <span class="inline-block px-4 py-1.5 rounded-full text-sm font-bold tracking-wide {{ $sc['badge'] }}" data-status-badge>
-                {{ \App\Models\Delivery::STATUS_LABELS[$delivery->status] ?? $delivery->status }}
+                {{ \App\Models\DELIVERY_STATUS::tryFrom($delivery->status)?->label() ?? $delivery->status }}
             </span>
         </div>
         <div class="ml-auto text-right">

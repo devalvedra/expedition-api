@@ -9,6 +9,7 @@ use App\Models\DELIVERY_STATUS;
 use App\Utils\ApiResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class DeliveryController extends Controller
@@ -97,7 +98,7 @@ class DeliveryController extends Controller
             'jumlah_barang_besar'  => 'sometimes|integer|min:0',
             'jumlah_barang_sedang' => 'sometimes|integer|min:0',
             'jumlah_barang_kecil'  => 'sometimes|integer|min:0',
-            'status'               => 'sometimes|string|in:' . implode(',', array_map(fn($status) => $status->value, \App\Models\Delivery\STATUSES::cases())),
+            'status'               => 'sometimes|string|in:' . implode(',', array_map(fn($s) => $s->value, DELIVERY_STATUS::cases())),
             'no_kendaraan'         => 'nullable|string|max:255',
         ]);
 
@@ -258,43 +259,108 @@ class DeliveryController extends Controller
 
     public function getDeliveryRoute($vehicleNo): JsonResponse
     {
-        $delivery = Delivery::with('pbf')->where('no_kendaraan', $vehicleNo)->where('status', DELIVERY_STATUS::WAITING_DRIVER->value)->get();
+        $deliveries = Delivery::with('pbf')
+            ->where('no_kendaraan', $vehicleNo)
+            ->where('status', DELIVERY_STATUS::LOADED->value)
+            ->get();
 
-        if ($delivery->isEmpty()) {
+        if ($deliveries->isEmpty()) {
             return ApiResponse::notFound('Delivery not found');
         }
-
 
         // Always set the first route point to the head office (HO)
         $HO = Pbf::where('kode_pbf', 'HO')->first();
 
-        
         $routePoints = [
             [
-                "drop_point_code" => "HO",
-                "drop_point_name" => "Head Office",
-                "sequence" => 1,
-                "lat" => $HO->lat,
-                "lng" => $HO->lng
+                'drop_point_code' => 'HO',
+                'drop_point_name' => 'Head Office',
+                'sequence'        => 1,
+                'lat'             => $HO->lat,
+                'lng'             => $HO->lng,
+                'invoices'        => [],
             ],
         ];
 
-        foreach ($delivery as $d) {
+        foreach ($deliveries as $d) {
+            // Resolve nojual via nofaktur = no_invoice
+            $jual = DB::table('tbjual')
+                ->where('nofaktur', $d->no_invoice)
+                ->first();
+
+            $items = [];
+            if ($jual) {
+                $rows = DB::table('tbbarangrinci as tbr')
+                    ->leftJoin('tbbarang as tb', 'tbr.barang_id', '=', 'tb.barang_id')
+                    ->where('tbr.notransaksi', $jual->nojual)
+                    ->orderBy('tbr.locator')
+                    ->orderBy('tb.nama_barang')
+                    ->select([
+                        'tbr.no',
+                        'tbr.barang_id',
+                        'tbr.jlh',
+                        'tbr.locator',
+                        'tbr.no_batch',
+                        'tbr.nobd',
+                        'tbr.expired',
+                        'tb.nama_barang',
+                        'tb.satuan',
+                        'tb.sqty',
+                        'tb.qty',
+                        'tb.kategori',
+                    ])
+                    ->get();
+
+                foreach ($rows as $item) {
+                    $qty  = intval($item->qty ?: 1);
+                    $c    = intval($item->jlh / $qty);
+                    $p    = $item->jlh % $qty;
+
+                    if ($c === 0) {
+                        $jumlah = "{$p} {$item->sqty}";
+                    } elseif ($p === 0) {
+                        $jumlah = "{$c} {$item->satuan}";
+                    } else {
+                        $jumlah = "{$c} {$item->satuan}/{$p} {$item->sqty}";
+                    }
+
+                    $items[] = [
+                        'no'          => $item->no,
+                        'barang_id'   => $item->barang_id,
+                        'nama_barang' => $item->nama_barang,
+                        'kategori'    => $item->kategori,
+                        'jumlah'      => $jumlah,
+                        'locator'     => $item->locator,
+                        'no_batch'    => $item->no_batch,
+                        'nobd'        => $item->nobd,
+                        'expired'     => $item->expired,
+                    ];
+                }
+            }
+
             $routePoints[] = [
-                "drop_point_code" => $d->kode_pbf,
-                "drop_point_name" => $d->pbf->nama_pbf,
-                "sequence" => count($routePoints) + 1,
-                "lat" => $d->pbf->lat,
-                "lng" => $d->pbf->lng
+                'drop_point_code' => $d->kode_pbf,
+                'drop_point_name' => $d->pbf->nama_pbf,
+                'sequence'        => count($routePoints) + 1,
+                'lat'             => $d->pbf->lat,
+                'lng'             => $d->pbf->lng,
+                'invoices'        => [
+                    [
+                        'no_invoice'           => $d->no_invoice,
+                        'jumlah_barang_besar'  => $d->jumlah_barang_besar,
+                        'jumlah_barang_sedang' => $d->jumlah_barang_sedang,
+                        'jumlah_barang_kecil'  => $d->jumlah_barang_kecil,
+                        'items'                => $items,
+                    ],
+                ],
             ];
         }
 
         $data = [
-            'code' => 'Rute',
-            'name' => 'Rute Pengiriman',
-            'route_points' => $routePoints
+            'code'         => 'Rute',
+            'name'         => 'Rute Pengiriman',
+            'route_points' => $routePoints,
         ];
-
 
         return ApiResponse::success($data, 'Route retrieved successfully');
     }

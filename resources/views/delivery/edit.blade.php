@@ -70,8 +70,8 @@
                     <select name="status" id="status" required
                             class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                         @foreach ($statuses as $s)
-                            <option value="{{ $s }}" {{ old('status', $delivery->status) === $s ? 'selected' : '' }}>
-                                {{ \App\Models\Delivery::STATUS_LABELS[$s] ?? $s }}
+                            <option value="{{ $s->value }}" {{ old('status', $delivery->status) === $s->value ? 'selected' : '' }}>
+                                {{ $s->label() }}
                             </option>
                         @endforeach
                     </select>
