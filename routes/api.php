@@ -46,10 +46,7 @@ Route::prefix('sell')->group(function () {
     Route::get('/pickup-items', [SellController::class, 'getPickupItems']);
     Route::get('/pickup-items/{qrcode}', [SellController::class, 'getPickupItemsByQrCode']);
     Route::put('/update-pickup-items', [SellController::class, 'updatePickupItems']);
-    // Route::post('/', [SellController::class, 'store']);
-    // Route::get('/{id}', [SellController::class, 'show']);
-    // Route::put('/{id}', [SellController::class, 'update']);
-    // Route::delete('/{id}', [SellController::class, 'destroy']);
+    Route::put('/cancel-pickup-items', [SellController::class, 'cancelPickupItems']);
 });
 
 // Alternative using apiResource (uncomment if preferred)

@@ -137,194 +137,89 @@ class SellController extends Controller
         return ApiResponse::success(null, 'Sell deleted successfully');
     }
 
-    public function getPickupItems(): JsonResponse
+    public function getPickupItems(Request $request): JsonResponse
     {
-        $listInvoice = DB::select("select nojual from tbjual where sales_id='Aling' order by tgl desc");
-        // $nojual = 'P-0725-000004';
+        $validator = Validator::make($request->all(), [
+            'iduser'           => 'required|string',
+            'assigned_floor'   => 'required_unless:iduser,admin|array',
+            'assigned_floor.*' => 'string|in:1,2,3',
+            'status_pickup'    => 'required_if:iduser,admin|string',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors());
+        }
+
+        $iduser = $request->input('iduser');
+
+        if ($iduser === 'admin') {
+            $statusPickup = $request->input('status_pickup');
+            $statusspb = match ($statusPickup) {
+                'pending' => 'print',
+                'selesai' => 'ambil',
+                default   => null,
+            };
+
+            $listInvoice = DB::select(
+                "select nojual, status_pickup from tbjual where status_pickup = ? and statusspb = ? order by created_at desc",
+                [$statusPickup, $statusspb]
+            );
+
+            $data = [];
+            foreach ($listInvoice as $invoice) {
+                $items = $this->fetchAllItemsForInvoice($invoice->nojual);
+                $data[] = [
+                    'nojual'        => $invoice->nojual,
+                    'status_pickup' => $invoice->status_pickup,
+                    'list_barang'   => array_map(fn($item) => array_merge(
+                        $this->mapPickupItem($item, withBatchInfo: true),
+                        [
+                            'lantai'       => $this->resolveFloor($item),
+                            'diambil'      => $item->diambil,
+                            'waktu_ambil'  => $item->waktu_ambil,
+                            'iduser_ambil' => $item->iduser_ambil,
+                        ]
+                    ), $items),
+                ];
+            }
+
+            return ApiResponse::success($data, 'Pickup items retrieved successfully');
+        }
+
+        $assignedFloor = $request->input('assigned_floor');
+
+        $allSections = [
+            '1'  => ['kategori' => 'obat',  'lantai' => '1',  'locators' => ['A','B','C','D'], 'notIn' => false],
+            '2a' => ['kategori' => 'obat',  'lantai' => '2a', 'locators' => ['F','G','H'],     'notIn' => false],
+            '2b' => ['kategori' => 'obat',  'lantai' => '2b', 'locators' => ['E'],             'notIn' => false],
+            '2c' => ['kategori' => 'alkes', 'lantai' => '2c', 'locators' => ['E'],             'notIn' => false],
+            '3'  => ['kategori' => 'alkes', 'lantai' => '3',  'locators' => ['E'],             'notIn' => true],
+        ];
+
+        $sections = array_filter($allSections, fn($key) => in_array(strval($key)[0], $assignedFloor), ARRAY_FILTER_USE_KEY);
+
+        $listInvoice = DB::select(
+            "select nojual from tbjual where statusspb='print' and status_pickup='pending' order by created_at asc limit 1"
+        );
 
         $data = [];
 
         foreach ($listInvoice as $invoice) {
             $nojual = $invoice->nojual;
 
-            // Obat lantai 1
-            $floor1 = DB::select("select tbr.*, tb.nama_barang,tb.satuan,tb.kategori,tb.sqty 
-                        from tbbarangrinci tbr left join tbbarang tb on tbr.barang_id = tb.barang_id 
-                        where tbr.notransaksi='$nojual' and tb.kategori='obat'	and SUBSTR(tbr.locator, 1, 1) in ('A','B','C','D')
-                        and tbr.diambil='N'
-                        order by tbr.locator ,tb.nama_barang asc");
-            // Obat lantai 2
-            $floor2a = DB::select("select tbr.*, tb.nama_barang,tb.satuan,tb.kategori,tb.sqty 
-                        from tbbarangrinci tbr left join tbbarang tb on tbr.barang_id = tb.barang_id 
-                        where tbr.notransaksi='$nojual' and tb.kategori='obat'	and SUBSTR(tbr.locator, 1, 1) in ('F','G','H')
-                        and tbr.diambil='N'
-                        order by tbr.locator ,tb.nama_barang asc");
-            $floor2b = DB::select("select tbr.*, tb.nama_barang,tb.satuan,tb.kategori,tb.sqty 
-                        from tbbarangrinci tbr left join tbbarang tb on tbr.barang_id = tb.barang_id 
-                        where tbr.notransaksi='$nojual' and tb.kategori='obat'	and SUBSTR(tbr.locator, 1, 1) in ('E')
-                        and tbr.diambil='N'
-                        order by tbr.locator ,tb.nama_barang asc");
-                
-            // Alkes lantai 3
-            $floor3 = DB::select("select tbr.*, tb.nama_barang,tb.satuan,tb.kategori,tb.sqty 
-                        from tbbarangrinci tbr left join tbbarang tb on tbr.barang_id = tb.barang_id 
-                        where tbr.notransaksi='$nojual' and tb.kategori='alkes'	and (SUBSTR(tbr.locator, 1, 1) not in ('E'))
-                        and tbr.diambil='N'
-                        order by tbr.locator ,tb.nama_barang asc");
-            // Alkes lantai 2
-            $floor2c = DB::select("select tbr.*, tb.nama_barang,tb.satuan,tb.kategori,tb.sqty 
-                        from tbbarangrinci tbr left join tbbarang tb on tbr.barang_id = tb.barang_id 
-                        where tbr.notransaksi='$nojual' and tb.kategori='alkes'	and (SUBSTR(tbr.locator, 1, 1) in ('E'))
-                        and tbr.diambil='N'
-                        order by tbr.locator ,tb.nama_barang asc");
+            foreach ($sections as $section) {
+                $items = $this->fetchItemsByLocator($nojual, $section['kategori'], $section['locators'], $section['notIn']);
+                if (count($items) > 0) {
+                    $data[] = $this->buildFloorSection($nojual, $section['kategori'], $section['lantai'], $items);
 
-            if (count($floor1) > 0) {
-                $data[] = [
-                    'nojual' => $nojual,
-                    'kategori' => 'obat',
-                    'lantai' => '1',
-                    'list_barang' => array_map(function($item) {
-
-                        $c = intval($item->jlh / $item->qty);
-                        $p = $item->jlh % $item->qty;
-
-
-                        if ($c == 0) {
-                            $jlhbrg = "$p $item->sqty";
-                        } elseif ($p == 0) {
-                            $jlhbrg = "$c $item->satuan";
-                        } else {
-                            $jlhbrg = "$c $item->satuan/$p $item->sqty";
-                        }
-
-                        return [
-                            'no' => $item->no,
-                            'barang_id' => $item->barang_id,
-                            'nama_barang' => $item->nama_barang,
-                            'kategori' => $item->kategori,
-                            'jumlah' => $jlhbrg,
-                            'locator' => $item->locator,
-                        ];
-                    }, $floor1),
-                ];
+                    $noList = array_column($items, 'no');
+                    DB::table('tbbarangrinci')
+                        ->where('notransaksi', $nojual)
+                        ->whereIn('no', $noList)
+                        ->update(['diambil' => 'P']);
+                }
             }
-            if (count($floor2a) > 0) {
-                $data[] = [
-                    'nojual' => $nojual,
-                    'kategori' => 'obat',
-                    'lantai' => '2a',
-                    'list_barang' => array_map(function($item) {
-                        $c = intval($item->jlh / $item->qty);
-                        $p = $item->jlh % $item->qty;
-
-
-                        if ($c == 0) {
-                            $jlhbrg = "$p $item->sqty";
-                        } elseif ($p == 0) {
-                            $jlhbrg = "$c $item->satuan";
-                        } else {
-                            $jlhbrg = "$c $item->satuan/$p $item->sqty";
-                        }
-
-                        return [
-                            'no' => $item->no,
-                            'barang_id' => $item->barang_id,
-                            'nama_barang' => $item->nama_barang,
-                            'kategori' => $item->kategori,
-                            'jumlah' => $jlhbrg,
-                            'locator' => $item->locator,
-                        ];
-                    }, $floor2a),
-                ];
-            }
-            if (count($floor2b) > 0) {
-                $data[] = [
-                    'nojual' => $nojual,
-                    'kategori' => 'obat',
-                    'lantai' => '2b',
-                    'list_barang' => array_map(function($item) {
-                        $c = intval($item->jlh / $item->qty);
-                        $p = $item->jlh % $item->qty;
-
-
-                        if ($c == 0) {
-                            $jlhbrg = "$p $item->sqty";
-                        } elseif ($p == 0) {
-                            $jlhbrg = "$c $item->satuan";
-                        } else {
-                            $jlhbrg = "$c $item->satuan/$p $item->sqty";
-                        }
-
-                        return [
-                            'no' => $item->no,
-                            'barang_id' => $item->barang_id,
-                            'nama_barang' => $item->nama_barang,
-                            'kategori' => $item->kategori,
-                            'jumlah' => $jlhbrg,
-                            'locator' => $item->locator,
-                        ];
-                    }, $floor2b),
-                ];
-            }
-            if (count($floor2c) > 0) {
-                $data[] = [
-                    'nojual' => $nojual,
-                    'kategori' => 'alkes',
-                    'lantai' => '2c',
-                    'list_barang' => array_map(function($item) {
-                        $c = intval($item->jlh / $item->qty);
-                        $p = $item->jlh % $item->qty;
-
-
-                        if ($c == 0) {
-                            $jlhbrg = "$p $item->sqty";
-                        } elseif ($p == 0) {
-                            $jlhbrg = "$c $item->satuan";
-                        } else {
-                            $jlhbrg = "$c $item->satuan/$p $item->sqty";
-                        }
-
-                        return [
-                            'no' => $item->no,
-                            'barang_id' => $item->barang_id,
-                            'nama_barang' => $item->nama_barang,
-                            'kategori' => $item->kategori,
-                            'jumlah' => $jlhbrg,
-                            'locator' => $item->locator,
-                        ];
-                    }, $floor2c),
-                ];
-            }
-            if (count($floor3) > 0) {
-                $data[] = [
-                    'nojual' => $nojual,
-                    'kategori' => 'alkes',
-                    'lantai' => '3',
-                    'list_barang' => array_map(function($item) {
-                        $c = intval($item->jlh / $item->qty);
-                        $p = $item->jlh % $item->qty;
-
-
-                        if ($c == 0) {
-                            $jlhbrg = "$p $item->sqty";
-                        } elseif ($p == 0) {
-                            $jlhbrg = "$c $item->satuan";
-                        } else {
-                            $jlhbrg = "$c $item->satuan/$p $item->sqty";
-                        }
-
-                        return [
-                            'no' => $item->no,
-                            'barang_id' => $item->barang_id,
-                            'nama_barang' => $item->nama_barang,
-                            'kategori' => $item->kategori,
-                            'jumlah' => $jlhbrg,
-                            'locator' => $item->locator,
-                        ];
-                    }, $floor3),
-                ];
-            }
-        }    
+        }
 
         return ApiResponse::success($data, 'Pickup items retrieved successfully');
     }
@@ -332,194 +227,123 @@ class SellController extends Controller
 
     public function getPickupItemsByQrCode(string $qrCode): JsonResponse
     {
-        // qrcode format: {floor}-{nospb}, example: 1-SPB-P-0725-000004
+        // qrcode format: {floor}-SPB-{nojual}, example: 1-SPB-P-0725-000004
         $split = explode('-SPB-', $qrCode);
         $floor = $split[0];
         $nojual = $split[1];
 
         $data = null;
-
-        $itemType = substr($nojual, 0, 1) == 'P' ? 'obat' : 'alkes';
+        $itemType = substr($nojual, 0, 1) === 'P' ? 'obat' : 'alkes';
 
         if ($itemType === 'obat') {
-            if ($floor == '1') {
-                // Obat lantai 1
-                $floor1 = DB::select("select tbr.*, tb.nama_barang,tb.satuan,tb.kategori,tb.sqty 
-                        from tbbarangrinci tbr left join tbbarang tb on tbr.barang_id = tb.barang_id 
-                        where tbr.notransaksi='$nojual' and tb.kategori='obat'	and SUBSTR(tbr.locator, 1, 1) in ('A','B','C','D')
-                        and tbr.diambil='N'
-                        order by tbr.locator ,tb.nama_barang asc");
-
-                if (count($floor1) > 0) {
-                    $data = [
-                        'nojual' => $nojual,
-                        'kategori' => 'obat',
-                        'lantai' => '1',
-                        'list_barang' => array_map(function($item) {
-
-                            $c = intval($item->jlh / $item->qty);
-                            $p = $item->jlh % $item->qty;
-
-
-                            if ($c == 0) {
-                                $jlhbrg = "$p $item->sqty";
-                            } elseif ($p == 0) {
-                                $jlhbrg = "$c $item->satuan";
-                            } else {
-                                $jlhbrg = "$c $item->satuan/$p $item->sqty";
-                            }
-
-                            return [
-                                'no' => $item->no,
-                                'barang_id' => $item->barang_id,
-                                'nama_barang' => $item->nama_barang,
-                                'kategori' => $item->kategori,
-                                'jumlah' => $jlhbrg,
-                                'locator' => $item->locator,
-                                'no_batch' => $item->no_batch,
-                                'nobd' => $item->nobd,
-                                'expired' => $item->expired,
-                            ];
-                        }, $floor1),
-                    ];
-                }
+            if ($floor === '1') {
+                $items = $this->fetchItemsByLocator($nojual, 'obat', ['A','B','C','D']);
+            } elseif ($floor === '2') {
+                $floor2a = $this->fetchItemsByLocator($nojual, 'obat', ['F','G','H']);
+                $floor2b = $this->fetchItemsByLocator($nojual, 'obat', ['E']);
+                $items = array_merge($floor2a, $floor2b);
             }
-            elseif ($floor == '2') {
-        
-                // Obat lantai 2
-                $floor2a = DB::select("select tbr.*, tb.nama_barang,tb.satuan,tb.kategori,tb.sqty 
-                            from tbbarangrinci tbr left join tbbarang tb on tbr.barang_id = tb.barang_id 
-                            where tbr.notransaksi='$nojual' and tb.kategori='obat'	and SUBSTR(tbr.locator, 1, 1) in ('F','G','H')
-                            and tbr.diambil='N'
-                            order by tbr.locator ,tb.nama_barang asc");
-                $floor2b = DB::select("select tbr.*, tb.nama_barang,tb.satuan,tb.kategori,tb.sqty 
-                            from tbbarangrinci tbr left join tbbarang tb on tbr.barang_id = tb.barang_id 
-                            where tbr.notransaksi='$nojual' and tb.kategori='obat'	and SUBSTR(tbr.locator, 1, 1) in ('E')
-                            and tbr.diambil='N'
-                            order by tbr.locator ,tb.nama_barang asc");
-
-                $floor2 = array_merge($floor2a, $floor2b);
-
-                if (count($floor2) > 0) {
-                    $data = [
-                        'nojual' => $nojual,
-                        'kategori' => 'obat',
-                        'lantai' => '2',
-                        'list_barang' => array_map(function($item) {
-                            $c = intval($item->jlh / $item->qty);
-                            $p = $item->jlh % $item->qty;
-
-
-                            if ($c == 0) {
-                                $jlhbrg = "$p $item->sqty";
-                            } elseif ($p == 0) {
-                                $jlhbrg = "$c $item->satuan";
-                            } else {
-                                $jlhbrg = "$c $item->satuan/$p $item->sqty";
-                            }
-
-                            return [
-                                'no' => $item->no,
-                                'barang_id' => $item->barang_id,
-                                'nama_barang' => $item->nama_barang,
-                                'kategori' => $item->kategori,
-                                'jumlah' => $jlhbrg,
-                                'locator' => $item->locator,
-                                'no_batch' => $item->no_batch,
-                                'nobd' => $item->nobd,
-                                'expired' => $item->expired,
-                            ];
-                        }, $floor2),
-                    ];
-                }
+        } else {
+            if ($floor === '3') {
+                $items = $this->fetchItemsByLocator($nojual, 'alkes', ['E'], notIn: true);
+            } else {
+                $items = $this->fetchItemsByLocator($nojual, 'alkes', ['E']);
             }
         }
-        else {
-            if ($floor == '3') {
-                // Alkes lantai 3
-                $floor3 = DB::select("select tbr.*, tb.nama_barang,tb.satuan,tb.kategori,tb.sqty 
-                            from tbbarangrinci tbr left join tbbarang tb on tbr.barang_id = tb.barang_id 
-                            where tbr.notransaksi='$nojual' and tb.kategori='alkes'	and (SUBSTR(tbr.locator, 1, 1) not in ('E'))
-                            and tbr.diambil='N'
-                            order by tbr.locator ,tb.nama_barang asc");
 
-                if (count($floor3) > 0) {
-                    $data = [
-                        'nojual' => $nojual,
-                        'kategori' => 'alkes',
-                        'lantai' => '3',
-                        'list_barang' => array_map(function($item) {
-                            $c = intval($item->jlh / $item->qty);
-                            $p = $item->jlh % $item->qty;
-
-
-                            if ($c == 0) {
-                                $jlhbrg = "$p $item->sqty";
-                            } elseif ($p == 0) {
-                                $jlhbrg = "$c $item->satuan";
-                            } else {
-                                $jlhbrg = "$c $item->satuan/$p $item->sqty";
-                            }
-
-                            return [
-                                'no' => $item->no,
-                                'barang_id' => $item->barang_id,
-                                'nama_barang' => $item->nama_barang,
-                                'kategori' => $item->kategori,
-                                'jumlah' => $jlhbrg,
-                                'locator' => $item->locator,
-                                'no_batch' => $item->no_batch,
-                                'nobd' => $item->nobd,
-                                'expired' => $item->expired,
-                            ];
-                        }, $floor3),
-                    ];
-                }
-            }
-            else {
-                  // Alkes lantai 2
-                $floor2c = DB::select("select tbr.*, tb.nama_barang,tb.satuan,tb.kategori,tb.sqty 
-                            from tbbarangrinci tbr left join tbbarang tb on tbr.barang_id = tb.barang_id 
-                            where tbr.notransaksi='$nojual' and tb.kategori='alkes'	and (SUBSTR(tbr.locator, 1, 1) in ('E'))
-                            and tbr.diambil='N'
-                            order by tbr.locator ,tb.nama_barang asc");
-
-                if (count($floor2c) > 0) {
-                    $data = [
-                        'nojual' => $nojual,
-                        'kategori' => 'alkes',
-                        'lantai' => '2',
-                        'list_barang' => array_map(function($item) {
-                            $c = intval($item->jlh / $item->qty);
-                            $p = $item->jlh % $item->qty;
-
-
-                            if ($c == 0) {
-                                $jlhbrg = "$p $item->sqty";
-                            } elseif ($p == 0) {
-                                $jlhbrg = "$c $item->satuan";
-                            } else {
-                                $jlhbrg = "$c $item->satuan/$p $item->sqty";
-                            }
-
-                            return [
-                                'no' => $item->no,
-                                'barang_id' => $item->barang_id,
-                                'nama_barang' => $item->nama_barang,
-                                'kategori' => $item->kategori,
-                                'jumlah' => $jlhbrg,
-                                'locator' => $item->locator,
-                                'no_batch' => $item->no_batch,
-                                'nobd' => $item->nobd,
-                                'expired' => $item->expired,
-                            ];
-                        }, $floor2c),
-                    ];
-                }
-            }
+        if (!empty($items)) {
+            $data = $this->buildFloorSection($nojual, $itemType, $floor, $items, withBatchInfo: true);
         }
 
         return ApiResponse::success($data, 'Pickup items retrieved successfully');
+    }
+
+    private function resolveFloor(object $item): string
+    {
+        $firstChar = strtoupper(substr($item->locator, 0, 1));
+
+        if ($item->kategori === 'obat') {
+            if (in_array($firstChar, ['A','B','C','D'])) return '1';
+            if (in_array($firstChar, ['E','F','G','H'])) return '2';
+        } else {
+            if ($firstChar === 'E') return '2';
+            return '3';
+        }
+
+        return '-';
+    }
+
+    private function fetchAllItemsForInvoice(string $nojual): array
+    {
+        return DB::select(
+            "select tbr.*, tb.nama_barang, tb.satuan, tb.kategori, tb.sqty
+             from tbbarangrinci tbr
+             left join tbbarang tb on tbr.barang_id = tb.barang_id
+             where tbr.notransaksi = ?
+             order by tbr.locator, tb.nama_barang asc",
+            [$nojual]
+        );
+    }
+
+    private function fetchItemsByLocator(string $nojual, string $kategori, array $locators, bool $notIn = false): array
+    {
+        $locatorList = implode("','", $locators);
+        $operator = $notIn ? 'not in' : 'in';
+
+        return DB::select(
+            "select tbr.*, tb.nama_barang, tb.satuan, tb.kategori, tb.sqty
+             from tbbarangrinci tbr
+             left join tbbarang tb on tbr.barang_id = tb.barang_id
+             where tbr.notransaksi = ? and tb.kategori = ?
+             and SUBSTR(tbr.locator, 1, 1) $operator ('$locatorList')
+             and tbr.diambil = 'N'
+             order by tbr.locator, tb.nama_barang asc",
+            [$nojual, $kategori]
+        );
+    }
+
+    private function buildFloorSection(string $nojual, string $kategori, string $lantai, array $items, bool $withBatchInfo = true): array
+    {
+        return [
+            'nojual'      => $nojual,
+            'kategori'    => $kategori,
+            'lantai'      => $lantai,
+            'no_qr'       => "$lantai-SPB-$nojual",
+            'list_barang' => array_map(fn($item) => $this->mapPickupItem($item, $withBatchInfo), $items),
+        ];
+    }
+
+    private function mapPickupItem(object $item, bool $withBatchInfo = true): array
+    {
+        $mapped = [
+            'no'          => $item->no,
+            'barang_id'   => $item->barang_id,
+            'nama_barang' => $item->nama_barang,
+            'kategori'    => $item->kategori,
+            'jumlah'      => $this->formatItemQuantity($item),
+            'locator'     => $item->locator,
+        ];
+
+        if ($withBatchInfo) {
+            $mapped['no_batch'] = $item->no_batch;
+            $mapped['nobd']     = $item->nobd;
+            $mapped['expired']  = $item->expired;
+        }
+
+        return $mapped;
+    }
+
+    private function formatItemQuantity(object $item): string
+    {
+        $c = intval($item->jlh / $item->qty);
+        $p = $item->jlh % $item->qty;
+
+        if ($c === 0) {
+            return "$p $item->sqty";
+        } elseif ($p === 0) {
+            return "$c $item->satuan";
+        }
+        return "$c $item->satuan/$p $item->sqty";
     }
 
     public function updatePickupItems(Request $request): JsonResponse
@@ -554,19 +378,61 @@ class SellController extends Controller
         foreach ($items as $item) {
             Log::info("Processing item", ['item' => $item]);
             if (!isset($item['nobd']) || !isset($item['waktu_ambil'])) {
-                return ApiResponse::validationError(['items' => 'Each item must have barang_id, nobd, and waktu_ambil']);
+                return ApiResponse::validationError(['items' => 'Each item must have nobd and waktu_ambil']);
             }
 
             // Update the item in the database (example using Eloquent)
             DB::table('tbbarangrinci')
                 ->where('notransaksi', $nojual)
                 ->where('nobd', $item['nobd'])
-                ->update(['diambil' => 'Y', 'waktu_ambil' => $item['waktu_ambil']]);
+                ->update(['diambil' => 'Y', 'waktu_ambil' => $item['waktu_ambil'], 'iduser_ambil' => $iduser]);
+        }
+
+        $remainingItems = DB::table('tbbarangrinci')
+            ->where('notransaksi', $nojual)
+            ->where('diambil', 'N')
+            ->count();
+
+        if ($remainingItems === 0) {
+            DB::table('tbjual')
+                ->where('nojual', $nojual)
+                ->update(['status_pickup' => 'selesai']);
         }
 
         return ApiResponse::success(null, 'Pickup items updated successfully');
     }
     
+    
+    public function cancelPickupItems(Request $request): JsonResponse
+    {
+        Log::info("Cancel pickup items request received", ['request' => $request->all()]);
+
+        $validator = Validator::make($request->all(), [
+            'qr_code' => 'required|string',
+            'iduser'  => 'required|string',
+            'items'   => 'required|array',
+            'items.*.nobd' => 'required|string',
+        ]);
+
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors());
+        }
+
+        $nojual = explode('-SPB-', $request->input('qr_code'))[1];
+        $nobdList = array_column($request->input('items'), 'nobd');
+
+        Log::info("Cancelling pickup items for nojual: $nojual", ['nobd_list' => $nobdList]);
+
+        DB::table('tbbarangrinci')
+            ->where('notransaksi', $nojual)
+            ->whereIn('nobd', $nobdList)
+            ->where('diambil', 'P')
+            ->update(['diambil' => 'N']);
+
+        return ApiResponse::success(null, 'Pickup items cancellation successful');
+    }
+
 
     public function updateStatusAmbil($no_qr, $iduser)
     {
