@@ -8,6 +8,7 @@ use App\Http\Controllers\PickupController;
 use App\Http\Controllers\PbfController;
 use App\Http\Controllers\DeliveryController;
 use App\Http\Controllers\FcmTestController;
+use App\Http\Controllers\AuthController;
 
 /*
 |--------------------------------------------------------------------------
@@ -26,6 +27,16 @@ Route::get('/', function () {
         'message' => 'Eshia API is running',
         'version' => '1.0.0'
     ]);
+});
+
+// Auth endpoints
+Route::prefix('auth')->group(function () {
+    Route::post('/login', [AuthController::class, 'login']);
+
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/logout', [AuthController::class, 'logout']);
+        Route::get('/me', [AuthController::class, 'me']);
+    });
 });
 
 // Item CRUD endpoints
@@ -47,6 +58,10 @@ Route::prefix('sell')->group(function () {
     Route::get('/pickup-items/{qrcode}', [SellController::class, 'getPickupItemsByQrCode']);
     Route::put('/update-pickup-items', [SellController::class, 'updatePickupItems']);
     Route::put('/cancel-pickup-items', [SellController::class, 'cancelPickupItems']);
+
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/all-pickup-items', [SellController::class, 'getAllPickupItems']);
+    });
 });
 
 // Alternative using apiResource (uncomment if preferred)

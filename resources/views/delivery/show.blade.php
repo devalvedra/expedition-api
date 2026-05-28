@@ -195,7 +195,7 @@
             {{-- ── Right: Map ── --}}
             <div class="flex-1 relative" style="min-height:280px">
 
-                @if($delivery->status === \App\Models\DELIVERY_STATUS::IN_TRANSIT->value && $delivery->no_kendaraan)
+                @if($delivery->status === \App\Models\DELIVERY_STATUS::IN_DELIVERY->value && $delivery->no_kendaraan)
 
                     {{-- Map canvas --}}
                     <div id="delivery-map" class="absolute inset-0"></div>

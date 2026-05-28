@@ -137,53 +137,65 @@ class SellController extends Controller
         return ApiResponse::success(null, 'Sell deleted successfully');
     }
 
-    public function getPickupItems(Request $request): JsonResponse
+    public function getAllPickupItems(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'iduser'           => 'required|string',
-            'assigned_floor'   => 'required_unless:iduser,admin|array',
-            'assigned_floor.*' => 'string|in:1,2,3',
-            'status_pickup'    => 'required_if:iduser,admin|string',
+            'status_pickup' => 'required|string',
         ]);
 
         if ($validator->fails()) {
             return ApiResponse::validationError($validator->errors());
         }
 
-        $iduser = $request->input('iduser');
+        // $user = $request->user();
 
-        if ($iduser === 'admin') {
-            $statusPickup = $request->input('status_pickup');
-            $statusspb = match ($statusPickup) {
-                'pending' => 'print',
-                'selesai' => 'ambil',
-                default   => null,
-            };
+        // if (!$user || $user->role !== 'admin') {
+        //     return ApiResponse::success([], 'Pickup items retrieved successfully');
+        // }
 
-            $listInvoice = DB::select(
-                "select nojual, status_pickup from tbjual where status_pickup = ? and statusspb = ? order by created_at desc",
-                [$statusPickup, $statusspb]
-            );
+        $statusPickup = $request->input('status_pickup');
+        $statusspb = match ($statusPickup) {
+            'pending' => 'print',
+            'selesai' => 'ambil',
+            default   => null,
+        };
 
-            $data = [];
-            foreach ($listInvoice as $invoice) {
-                $items = $this->fetchAllItemsForInvoice($invoice->nojual);
-                $data[] = [
-                    'nojual'        => $invoice->nojual,
-                    'status_pickup' => $invoice->status_pickup,
-                    'list_barang'   => array_map(fn($item) => array_merge(
-                        $this->mapPickupItem($item, withBatchInfo: true),
-                        [
-                            'lantai'       => $this->resolveFloor($item),
-                            'diambil'      => $item->diambil,
-                            'waktu_ambil'  => $item->waktu_ambil,
-                            'iduser_ambil' => $item->iduser_ambil,
-                        ]
-                    ), $items),
-                ];
-            }
+        $listInvoice = DB::select(
+            "select nojual, status_pickup from tbjual where status_pickup = ? order by created_at desc",
+            [$statusPickup]
+        );
 
-            return ApiResponse::success($data, 'Pickup items retrieved successfully');
+        $data = [];
+        foreach ($listInvoice as $invoice) {
+            $items = $this->fetchAllItemsForInvoice($invoice->nojual);
+            $data[] = [
+                'nojual'        => $invoice->nojual,
+                'status_pickup' => $invoice->status_pickup,
+                'list_barang'   => array_map(fn($item) => array_merge(
+                    $this->mapPickupItem($item, withBatchInfo: true),
+                    [
+                        'lantai'       => $this->resolveFloor($item),
+                        'diambil'      => $item->diambil,
+                        'waktu_ambil'  => $item->waktu_ambil,
+                        'iduser_ambil' => $item->iduser_ambil,
+                    ]
+                ), $items),
+            ];
+        }
+
+        return ApiResponse::success($data, 'Pickup items retrieved successfully');
+    }
+
+    public function getPickupItems(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'iduser'           => 'required|string',
+            'assigned_floor'   => 'required|array',
+            'assigned_floor.*' => 'string|in:1,2,3',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors());
         }
 
         $assignedFloor = $request->input('assigned_floor');
@@ -484,6 +496,7 @@ class SellController extends Controller
                     }
 
                     $sql2 = "UPDATE `tbjual` SET `statusspb` = '$act' $tambahan WHERE `tbjual`.`nospb` = '$no'";
+                    Log::info("Updating tbjual with SQL", ['sql' => $sql2]);
                     DB::update($sql2);
                 }
             } else {

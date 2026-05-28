@@ -54,7 +54,7 @@ class DeliveryController extends Controller
         }
 
         $data = $request->only(['no_invoice', 'kode_pbf', 'jumlah_barang_besar', 'jumlah_barang_sedang', 'jumlah_barang_kecil', 'no_kendaraan']);
-        $data['status'] = DELIVERY_STATUS::PENDING->value;
+        $data['status'] = DELIVERY_STATUS::LOADED->value;
 
         $delivery = Delivery::create($data);
 
@@ -146,7 +146,7 @@ class DeliveryController extends Controller
 
         foreach ($deliveries as $delivery) {
             $delivery->no_kendaraan = $request->vehicle_no;
-            $delivery->status = DELIVERY_STATUS::WAITING_DRIVER->value; // update status to "Menunggu Supir"
+            $delivery->status = DELIVERY_STATUS::IN_DELIVERY->value; // update status to "Dalam Pengiriman"
             $delivery->save();
 
             $history = DeliveryHistory::create([
@@ -188,8 +188,8 @@ class DeliveryController extends Controller
 
         $historyStatus = DELIVERY_STATUS::LOADED->value;
         switch ($request->status) {
-            case DELIVERY_STATUS::WAITING_DRIVER->value:
-                $historyStatus = DELIVERY_STATUS::LOADED->value;
+            case DELIVERY_STATUS::IN_DELIVERY->value:
+                $historyStatus = DELIVERY_STATUS::IN_DELIVERY->value;
                 break;
             case DELIVERY_STATUS::IN_TRANSIT->value:
                 $historyStatus = DELIVERY_STATUS::IN_TRANSIT->value;
@@ -234,7 +234,7 @@ class DeliveryController extends Controller
 
                 $historyStatus = DELIVERY_STATUS::LOADED->value;
                 switch ($request->status) {
-                    case DELIVERY_STATUS::WAITING_DRIVER->value:
+                    case DELIVERY_STATUS::LOADED->value:
                         $historyStatus = DELIVERY_STATUS::LOADED->value;
                         break;
                     case DELIVERY_STATUS::IN_TRANSIT->value:
@@ -261,7 +261,7 @@ class DeliveryController extends Controller
     {
         $deliveries = Delivery::with('pbf')
             ->where('no_kendaraan', $vehicleNo)
-            ->where('status', DELIVERY_STATUS::LOADED->value)
+            ->where('status', DELIVERY_STATUS::IN_DELIVERY->value)
             ->get();
 
         if ($deliveries->isEmpty()) {

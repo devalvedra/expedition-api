@@ -53,7 +53,7 @@ class DeliveryDashboardController extends Controller
 
         Delivery::create(array_merge(
             $request->only(['no_invoice', 'kode_pbf', 'jumlah_barang_besar', 'jumlah_barang_sedang', 'jumlah_barang_kecil', 'no_kendaraan']),
-            ['status' => DELIVERY_STATUS::PENDING->value]
+            ['status' => DELIVERY_STATUS::PROCESS->value]
         ));
 
         return redirect()->route('delivery.index')->with('success', 'Delivery berhasil ditambahkan.');

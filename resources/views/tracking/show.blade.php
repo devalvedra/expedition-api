@@ -27,6 +27,41 @@
         .dark .timeline-connector {
             background: linear-gradient(to bottom, #374151, #1f2937);
         }
+
+        /* Custom scrollbar – timeline list */
+        .timeline-scroll {
+            scrollbar-width: thin;
+            scrollbar-color: #9ca3af #f3f4f6;
+        }
+        .timeline-scroll::-webkit-scrollbar {
+            width: 5px;
+        }
+        .timeline-scroll::-webkit-scrollbar-track {
+            background: #f3f4f6;
+            border-radius: 9999px;
+        }
+        .timeline-scroll::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+            border-radius: 9999px;
+        }
+        .timeline-scroll::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
+        }
+        /* Dark mode */
+        @media (prefers-color-scheme: dark) {
+            .timeline-scroll {
+                scrollbar-color: #4b5563 #1f2937;
+            }
+            .timeline-scroll::-webkit-scrollbar-track {
+                background: #1f2937;
+            }
+            .timeline-scroll::-webkit-scrollbar-thumb {
+                background: #374151;
+            }
+            .timeline-scroll::-webkit-scrollbar-thumb:hover {
+                background: #4b5563;
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-100 dark:bg-gray-900 min-h-screen flex flex-col">
@@ -104,7 +139,7 @@
             ];
 
             $statusLabels = collect(\App\Models\DELIVERY_STATUS::cases())->mapWithKeys(fn($s) => [$s->value => $s->label()])->all();
-            $isInTransit   = $delivery->status === \App\Models\DELIVERY_STATUS::IN_TRANSIT->value;
+            $isInTransit   = $delivery->status === \App\Models\DELIVERY_STATUS::IN_DELIVERY->value;
             $isCompleted   = $delivery->status === \App\Models\DELIVERY_STATUS::COMPLETED->value;
             $hasPbfCoords  = $delivery->pbf && $delivery->pbf->lat && $delivery->pbf->lng;
             $showMap       = $isInTransit || $hasPbfCoords;
@@ -135,7 +170,7 @@
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
             {{-- Left column: Info + Timeline --}}
-            <div class="lg:col-span-1 space-y-5">
+            <div class="lg:col-span-1 flex flex-col gap-5">
 
                 {{-- Delivery info card --}}
                 <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 space-y-3">
@@ -176,8 +211,8 @@
                 </div>
 
                 {{-- Timeline card --}}
-                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5">
-                    <h2 class="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-5">Riwayat Status</h2>
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 flex flex-col">
+                    <h2 class="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-5 shrink-0">Riwayat Status</h2>
 
                     @if($history->isEmpty())
                         <div class="py-6 text-center">
@@ -188,6 +223,7 @@
                             <p class="text-sm text-gray-400 dark:text-gray-500 italic">Belum ada riwayat pengiriman.</p>
                         </div>
                     @else
+                        <div class="timeline-scroll overflow-y-auto max-h-[50vh] pr-1">
                         <ol class="relative ml-3">
                             @foreach($history as $h)
                             @php
@@ -224,13 +260,14 @@
                             </li>
                             @endforeach
                         </ol>
+                        </div>
                     @endif
                 </div>
 
             </div>
 
             {{-- Right column: Google Map --}}
-            <div class="lg:col-span-2">
+            <div class="lg:col-span-2 h-full">
                 <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden" style="min-height: 480px; height: 100%;">
 
                     <div class="px-5 pt-4 pb-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
