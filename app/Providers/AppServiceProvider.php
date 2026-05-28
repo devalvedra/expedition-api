@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use App\Hashing\Md5Hasher;
 use App\Models\Sell;
 use App\Observers\SellObserver;
 
@@ -13,7 +14,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->afterResolving('hash', function ($hashManager) {
+            $hashManager->extend('md5', fn () => new Md5Hasher());
+        });
     }
 
     /**
