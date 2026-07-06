@@ -99,4 +99,9 @@ class Sell extends Model
         'last_updated' => 'datetime',
         'deleted_at' => 'datetime',
     ];
+
+    public function vendor()
+    {
+        return $this->belongsTo(Vendor::class, 'pelanggan_id', 'kodevendor');
+    }
 }
