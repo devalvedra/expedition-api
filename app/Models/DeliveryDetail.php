@@ -14,6 +14,7 @@ class DeliveryDetail extends Model
         'koli', # double
         'ukuran', # varchar
         'harga', # double
+        'total', # double
     ];
 
     public function delivery()

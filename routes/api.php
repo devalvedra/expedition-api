@@ -26,6 +26,7 @@ Route::get('/', function () {
 // Delivery CRUD endpoints
 Route::prefix('delivery')->group(function () {
     Route::get('/', [DeliveryController::class, 'index']);
+    Route::get('/get-shipping-cost', [DeliveryController::class, 'getShippingCost']);
     Route::post('/', [DeliveryController::class, 'store']);
     Route::post('/get-delivery-route', [DeliveryController::class, 'getDeliveryRoute']);
     Route::post('/load-items-into-vehicle', [DeliveryController::class, 'loadItemsIntoVehicle']);

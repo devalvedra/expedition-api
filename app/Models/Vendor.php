@@ -20,4 +20,11 @@ class Vendor extends Model
     protected $guarded = [
         
     ];
+
+    public function shippingCosts()
+    {
+        return $this->hasMany(ShippingCost::class, 'kodevendor', 'kodevendor');
+    }
+
+    
 }

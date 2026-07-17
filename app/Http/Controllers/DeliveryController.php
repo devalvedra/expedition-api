@@ -7,6 +7,7 @@ use App\Models\DeliveryDetail;
 use App\Models\DeliveryHistory;
 use App\Models\DELIVERY_STATUS;
 use App\Models\Vendor;
+use App\Models\ShippingCost;
 use App\Utils\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -72,10 +73,9 @@ class DeliveryController extends Controller
             'kode_vendor' => 'nullable|string|exists:tbvendor,kodevendor',
             'kode_pbf' => 'nullable|string|exists:tbvendor,kodevendor',
             'pengirim' => 'nullable|string|exists:tbvendor,kodevendor',
-            'status' => 'nullable|string|in:' . implode(',', array_map(fn ($s) => $s->value, DELIVERY_STATUS::cases())),
             'username' => 'nullable|string|max:255',
             'iduser' => 'nullable|string|max:255',
-            'grandtotal' => 'nullable|numeric|min:0',
+            'nilai_faktur' => 'nullable|numeric|min:0',
             'items' => 'nullable|array',
             'items.*.koli' => 'required_with:items|numeric|min:0',
             'items.*.ukuran' => 'required_with:items|string|max:255',
@@ -106,15 +106,25 @@ class DeliveryController extends Controller
         $delivery->pelanggan_id = $request->input('penerima');
         $delivery->tgl_terima = now()->toDateString();
         $delivery->ditagih_ke = 'Penerima'; // hardcoded
-        $delivery->pay = 'Cash'; // hardcoded
-        $delivery->sisa = 0; // hardcoded
-        $delivery->nilai_faktur = 0; // hardcoded
-        $delivery->subtotal = 0; // hardcoded
+        $delivery->pay = 'Credit'; // hardcoded
+        $delivery->nilai_faktur = $request->input('nilai_faktur', 0);
+
+        // calculate grandtotal based on items if provided
+        $subtotal = 0;
+        if ($request->filled('items')) {
+            foreach ($request->input('items') as $item) {
+                $subtotal += ($item['koli']) * ($item['harga']);
+            }
+        }
+        
+
+        $delivery->subtotal = $subtotal; // calculated based on items
         $delivery->nominal_diskon = 0; // hardcoded
         $delivery->persen_diskon = 0; // hardcoded
         $delivery->nominal_pajak = 0; // hardcoded
-        $delivery->grandtotal = $request->input('grandtotal', 0); 
-        $delivery->status = $request->input('status', DELIVERY_STATUS::PROCESS->value);
+        $delivery->sisa = $subtotal - $delivery->nominal_diskon + $delivery->nominal_pajak; // calculated
+        $delivery->grandtotal = 0;
+        $delivery->status = DELIVERY_STATUS::PROCESS->value;
         $delivery->iduser = $request->input('iduser', $request->input('username'));
         $delivery->save();
 
@@ -638,9 +648,10 @@ class DeliveryController extends Controller
         foreach ($items as $item) {
             DeliveryDetail::create([
                 'no_resi' => $noResi,
-                'koli' => $item['koli'] ?? null,
-                'ukuran' => $item['ukuran'] ?? null,
-                'harga' => $item['harga'] ?? null,
+                'koli' => $item['koli'],
+                'ukuran' => $item['ukuran'],
+                'harga' => $item['harga'],
+                'total' => ($item['koli']) * ($item['harga']),
             ]);
         }
     }
@@ -669,5 +680,37 @@ class DeliveryController extends Controller
         }
 
         return sprintf('%s/%s/%s/%05d', now()->format('Y'), now()->format('m'), now()->format('d'), $nextIndex);
+    }
+
+    /**
+     * GET /api/deliveries/shipping-cost
+     * {
+     *   "sender": "VEND001",
+     *   "destination": "VEND002"
+     * }
+     */
+    public function getShippingCost(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'sender' => 'required|string|exists:tbvendor,kodevendor',
+            'destination' => 'required|string|exists:tbvendor,kodevendor',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors());
+        }
+
+        $destinationCity = Vendor::where('kodevendor', $request->destination)->first()->kota;
+
+        $shippingCost = ShippingCost::where('kodevendor', $request->sender)
+            ->where('kota', $destinationCity)
+            ->first();
+
+        if (!$shippingCost) {
+            return ApiResponse::notFound('Shipping cost not found for the given vendor and city');
+        }
+
+        return ApiResponse::success($shippingCost, 'Shipping cost retrieved successfully');
+
     }
 }
